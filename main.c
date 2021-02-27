@@ -30,16 +30,27 @@ struct midi {
     struct header header;
     struct track *tracks; //since a midi might contain multiple tracks
 };
-// convert be to le, byte by byte
+// set of functions that convert le to be, byte by byte
+// not necessary for a single byte ?
+uint32_t le2be16 (uint32_t number){
+    return(((number<<8) &0xff) |   // move byte 0 to byte 1
+           ((number>>8) &0x00ff));      // move byte 1 to byte 0
+} 
 
+uint32_t le2be32 (uint32_t number){
+    return(((number>>24)&0xff)       | // move byte 3 to byte 0
+           ((number<<8) &0xff0000)   | // move byte 1 to byte 2
+           ((number>>8) &0xff00)     | // move byte 2 to byte 1
+           ((number<<24)&0xff000000)); // byte 0 to byte 3
+} 
 
 int main(void){
     FILE *input;
     struct midi *midi;
-    int test, tracks; 
+    uint32_t test, tracks, swap; 
     uint8_t buf[HEADER_SIZE];
 
-    input = fopen("joel.mid", "r");
+    input = fopen("midis/joel.mid", "r");
     if (!input) {
         perror("Error at file opening");
         exit(1);
@@ -48,21 +59,23 @@ int main(void){
     // reads the main header of the file
     midi = malloc(sizeof(struct midi));
     // need to read in a buffer to correct the endianess
-    test = fread(buf, 1, HEADER_SIZE, input);
+    test = fread(midi, 1, HEADER_SIZE, input);
     if (test != HEADER_SIZE) {
         perror("Error at header");
         exit(1);
     }
-    for(int i = 0; i < HEADER_SIZE; i+=2){
-        midi[i] = ((uint8_t)buf[i+1]) | (((uint8_t)buf[i]) << 4);
-    }
+
+    midi->header.chunk_size = le2be32(midi->header.chunk_size);
+    midi->header.format_type = le2be16(midi->header.format_type);
+    midi->header.number_of_tracks = le2be16(midi->header.number_of_tracks);
+
     printf("chunk_ID:\t%.4s \n"
             "chunk_size:\t%x\n"
             "format:\t\t%d\n"
-            "track number:\t%d\n",
-            midi->header.chunk_ID,    // wrong
-            midi->header.chunk_size,  // wrong
-            midi->header.format_type, // wrong
+            "tracks:\t\t%d\n",
+            midi->header.chunk_ID,
+            midi->header.chunk_size,
+            midi->header.format_type,
             midi->header.number_of_tracks);
     
     // track by track, reading its header then allocating sufficient space for the read

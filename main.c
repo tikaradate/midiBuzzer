@@ -14,12 +14,13 @@ struct header {
 };
 
 struct midi_event {
-            uint8_t parameter1;
-            uint8_t *parameter2;
+    uint8_t parameter1;
+    uint8_t parameter2;
 };
-struct meta_event {
-            uint8_t lenght;
-            uint8_t *data;
+struct meta_event {  
+    uint8_t type;
+    uint8_t lenght;
+    uint8_t *data;
 };
 struct sysex_event{
             //???
@@ -103,7 +104,7 @@ int main(void){
     midi = malloc(sizeof(struct midi));
     // need to read in a buffer to correct the endianess
     if (fread(midi, 1, HEADER_SIZE, input) != HEADER_SIZE) {
-        perror("Error at reading header");
+        perror("Error reading the file header");
         exit(1);
     }
     whole_size += HEADER_SIZE;
@@ -178,10 +179,9 @@ int main(void){
             bytes++;
             printf("\nevent %x\n", midi->tracks[i].track_events[j].event);
             if (midi->tracks[i].track_events[j].event == 0xff){ // meta event
-                uint8_t type;
                 uint8_t lenght;
 
-                fread(&type, 1, 1, input);
+                fread(&midi->tracks[i].track_events[j].meta.type, 1, 1, input);
                 bytes++;
 
                 fread(&midi->tracks[i].track_events[j].meta.lenght,1,1,input);
@@ -197,8 +197,8 @@ int main(void){
                 printf("event_type:\t%x\n"
                     "event_lenght:\t%x\n"
                    , 
-                   type, lenght);
-                switch (type)
+                   midi->tracks[i].track_events[j].meta.type, lenght);
+                switch (midi->tracks[i].track_events[j].meta.type)
                 {
                 case 0x00:
                     /* code */
@@ -324,13 +324,114 @@ int main(void){
         }
         whole_size += bytes;
     }
+ 
+    /* rewriting the contents that just got read to a file 
+    so I can check whether or not it got read correctly */
+    fclose(input);
     FILE *output;
     output = fopen("./teste.mid","w");
-    fwrite(midi,1,whole_size, output);
+    midi->header.chunk_size = le2be32(midi->header.chunk_size);
+    midi->header.format_type = le2be16(midi->header.format_type);
+    midi->header.number_of_tracks = le2be16(midi->header.number_of_tracks);
+    midi->header.time_division = le2be16(midi->header.time_division);
+    fwrite(&midi->header,1,HEADER_SIZE, output);
+    for(int i = 0; i < tracks; i++){
+        
+        midi->tracks[i].chunk_size = le2be32(midi->tracks[i].chunk_size);
+        fwrite(&midi->tracks[i],1,TRACK_HDR_SIZE, output);
+        midi->tracks[i].chunk_size = le2be32(midi->tracks[i].chunk_size);
+
+        int bytes = 0;
+        int j = 0;
+
+        while(bytes < midi->tracks[i].chunk_size){
+            
+            uint32_t buffer;
+            buffer = midi->tracks[i].track_events[j].delta_time & 0x7F;
+            bytes++;
+            while ( (midi->tracks[i].track_events[j].delta_time >>= 7) )
+            {
+                bytes++;
+                buffer <<= 8;
+                buffer |= ((midi->tracks[i].track_events[j].delta_time & 0x7F) | 0x80);
+            }
+            
+            while (1)
+            {
+                putc(buffer,output);
+                if (buffer & 0x80)
+                    buffer >>= 8;
+                else
+                   break;
+            }
+
+            fwrite(&midi->tracks[i].track_events[j].event, 1, 1, output);
+            bytes++;
+            if(midi->tracks[i].track_events[j].event == 0xff){
+                fwrite(&midi->tracks[i].track_events[j].meta.type,1,1,output);
+                bytes++;
+                fwrite(&midi->tracks[i].track_events[j].meta.lenght,1,1,output);
+                bytes++;
+                if(midi->tracks[i].track_events[j].meta.type == 0x03){
+                    printf("wtf\n");
+
+                }
+                fwrite(&midi->tracks[i].track_events[j].meta.data,1,midi->tracks[i].track_events[j].meta.lenght,output);
+                bytes += midi->tracks[i].track_events[j].meta.lenght;
+            } else if(midi->tracks[i].track_events[j].event == 0xf0) {
+                //??
+            } else {
+                uint8_t type;
+                
+                type = midi->tracks[i].track_events[j].event & 0xf0;
+                type >>= 4;
+                fwrite(&midi->tracks[i].track_events[j].midi.parameter1, 1, 1, output);
+                bytes++;
+                switch (type)
+                {
+                case 0x08: // note off
+                    fwrite(&midi->tracks[i].track_events[j].midi.parameter2, 1, 1, output);
+                    bytes++;
+                    break;
+                case 0x09: // note on
+                    fwrite(&midi->tracks[i].track_events[j].midi.parameter2, 1, 1, output);
+                    bytes++;
+                    break;
+                case 0x0a: // note aftertouch
+                    fwrite(&midi->tracks[i].track_events[j].midi.parameter2, 1, 1, output);
+                    bytes++;
+                    break;
+                case 0x0b: // controller
+                    fwrite(&midi->tracks[i].track_events[j].midi.parameter2, 1, 1, output);
+                    bytes++;
+                    break;
+                case 0x0c: // program change
+                    
+                    break;
+                case 0x0d: // channel aftertouch
+                    
+                    break;
+                case 0x0e: // pitch bend
+                    fwrite(&midi->tracks[i].track_events[j].midi.parameter2, 1, 1, output);
+                    bytes++;
+                    break;
+                default:
+                    fprintf(stderr,"MIDI event not found, closing the program. %d\t%d\n",j, bytes);
+                    exit(1);
+                }
+            }
+            j++;
+        }
+        
+    }
+    
     return 0;
 }
-/*
+/* 
+variable length encoding
 80
+
+1000000
 
 1  0000000
 

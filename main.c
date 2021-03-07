@@ -88,8 +88,10 @@ void print_main_header(struct midi *midi){
 int main(void){
     FILE *input;
     struct midi *midi;
-    uint32_t test, tracks, swap; 
+    uint32_t test, tracks, swap, whole_size; 
     uint8_t time_format;
+    
+    whole_size = 0;
 
     input = fopen("midis/steven.mid", "r");
     if (!input) {
@@ -104,6 +106,8 @@ int main(void){
         perror("Error at reading header");
         exit(1);
     }
+    whole_size += HEADER_SIZE;
+
     // no need to convert the ID to big endian
     midi->header.chunk_size = le2be32(midi->header.chunk_size);
     midi->header.format_type = le2be16(midi->header.format_type);
@@ -134,7 +138,7 @@ int main(void){
             perror("Error reading file");
             exit(1);
         }
-        
+        whole_size += TRACK_HDR_SIZE;
         midi->tracks[i].chunk_size = le2be32(midi->tracks[i].chunk_size);
         printf("%x\n", midi->tracks[i].chunk_size);
 
@@ -318,8 +322,11 @@ int main(void){
                    midi->tracks[i].track_events[0].parameter2);
             */
         }
+        whole_size += bytes;
     }
-    
+    FILE *output;
+    output = fopen("./teste.mid","w");
+    fwrite(midi,1,whole_size, output);
     return 0;
 }
 /*

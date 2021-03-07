@@ -4,7 +4,7 @@ A little project to convert a midi file to something a buzzer can play.
 
 # status
 
-Basic struct format done, onto reading some files and observing what needs care.
+Reading simple midis is ok, need to work on reading more complex midis, in more detail, the controller event has some behaviour I need to read more about. Otherwise I can now try to write it to a buzzer-playable format.
 
 # resources
 

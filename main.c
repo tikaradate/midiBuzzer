@@ -28,6 +28,7 @@ struct sysex_event{
 struct track_events {
     uint32_t delta_time; // it can use up to 4 bytes
     uint8_t event; // the 4 upper bits are the event type and the 4 lower the channel
+    
     union{
         struct midi_event midi;
         struct meta_event meta;
@@ -52,6 +53,7 @@ struct midi {
     struct header header;
     struct track *tracks; //since a midi might contain multiple tracks
     struct time_info time_info;
+    uint8_t last_event;
 };
 
 // set of functions that convert little endian to big endian, byte by byte
@@ -94,7 +96,7 @@ int main(void){
     
     whole_size = 0;
 
-    input = fopen("midis/steven.mid", "r");
+    input = fopen("midis/joel.mid", "r");
     if (!input) {
         perror("Error at file opening");
         exit(1);
@@ -133,13 +135,13 @@ int main(void){
     tracks = midi->header.number_of_tracks;
     midi->tracks = malloc(sizeof(struct track)*tracks);
     for(int i = 0; i < tracks; i++){
+
         printf("\n\ntrack # %d\n\n", i);
         
-        if(fread(&midi->tracks[i],1, TRACK_HDR_SIZE, input) != TRACK_HDR_SIZE){
-            perror("Error reading file");
-            exit(1);
-        }
-        whole_size += TRACK_HDR_SIZE;
+        fread(&midi->tracks[i].chunk_ID, 1, 4, input);
+        whole_size += 4;
+        fread(&midi->tracks[i].chunk_size, 1, 4, input);
+        whole_size += 4;
         midi->tracks[i].chunk_size = le2be32(midi->tracks[i].chunk_size);
         printf("%x\n", midi->tracks[i].chunk_size);
 
@@ -177,7 +179,6 @@ int main(void){
             // now to checking which kind of event it is
             fread(&midi->tracks[i].track_events[j].event, 1, 1, input);
             bytes++;
-            printf("\nevent %x\n", midi->tracks[i].track_events[j].event);
             if (midi->tracks[i].track_events[j].event == 0xff){ // meta event
                 uint8_t lenght;
 
@@ -260,16 +261,32 @@ int main(void){
                 type = midi->tracks[i].track_events[j].event & 0xf0;
                 type >>= 4;
                 channel = midi->tracks[i].track_events[j].event & 0x0f;
-                // all midi events need this parameter, most use the second
-                fread(&midi->tracks[i].track_events[j].midi.parameter1, 1, 1, input);
-                bytes++;
-                printf("type:\t%x\n"
-                   "channel:\t%x\n"
-                   "parameter1:\t%d\n"
-                   , 
-                   type,
-                   channel,
-                   midi->tracks[i].track_events[j].midi.parameter1);
+                // if that checks if the event is a running status,
+                // i.e., the event type is the same as before
+                // it only happens when the data is < 0x08
+                if (type < 0x08){
+                    midi->tracks[i].track_events[j].midi.parameter1 = midi->tracks[i].track_events[j].event;
+                    midi->tracks[i].track_events[j].event = 0;
+                    type = midi->last_event & 0xf0;
+                    type >>= 4;
+                    channel = midi->last_event & 0x0f;
+                } else {
+                    midi->last_event = midi->tracks[i].track_events[j].event;
+                    // all midi events need this parameter, most use the second
+                    fread(&midi->tracks[i].track_events[j].midi.parameter1, 1, 1, input);
+                    bytes++;
+                }
+
+                
+                printf("event:\t%x\n"
+                    "type:\t%x\n"
+                    "channel:\t%x\n"
+                    "parameter1:\t%x\n"
+                    , 
+                    midi->tracks[i].track_events[j].event,
+                    type,
+                    channel,
+                    midi->tracks[i].track_events[j].midi.parameter1);
                 // for now not needed, only when transcribing to a buzzer readable format
                 switch (type)
                 {
@@ -305,8 +322,9 @@ int main(void){
                     bytes++;
                     break;
                 default:
-                    fprintf(stderr,"MIDI event not found, closing the program. %d\n",j);
-                    exit(1);
+                   
+                   fprintf(stderr,"MIDI event not found, closing the program. %d\n",j);
+                   exit(1);
                 }
             }
             j++;
@@ -327,6 +345,8 @@ int main(void){
  
     /* rewriting the contents that just got read to a file 
     so I can check whether or not it got read correctly */
+
+    
     fclose(input);
     FILE *output;
     output = fopen("./teste.mid","w");
@@ -364,9 +384,10 @@ int main(void){
                 else
                    break;
             }
-
-            fwrite(&midi->tracks[i].track_events[j].event, 1, 1, output);
-            bytes++;
+            if(midi->tracks[i].track_events[j].event != 0){
+                fwrite(&midi->tracks[i].track_events[j].event, 1, 1, output);
+                bytes++;
+            }
             if(midi->tracks[i].track_events[j].event == 0xff){
                 fwrite(&midi->tracks[i].track_events[j].meta.type,1,1,output);
                 bytes++;
@@ -382,9 +403,15 @@ int main(void){
                 //??
             } else {
                 uint8_t type;
-                
-                type = midi->tracks[i].track_events[j].event & 0xf0;
-                type >>= 4;
+                if(midi->tracks[i].track_events[j].event == 0){
+                    type = midi->last_event & 0xf0;
+                    type >>= 4;
+                } else {
+                    midi->last_event = midi->tracks[i].track_events[j].event;
+                    type = midi->tracks[i].track_events[j].event & 0xf0;
+                    type >>= 4;
+
+                }
                 fwrite(&midi->tracks[i].track_events[j].midi.parameter1, 1, 1, output);
                 bytes++;
                 switch (type)

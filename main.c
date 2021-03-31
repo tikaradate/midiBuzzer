@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <inttypes.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define HEADER_SIZE 14
 #define TRACK_HDR_SIZE 8
@@ -129,42 +130,33 @@ int main(void){
     //print_main_header(midi);
 
     // track by track, reading its header then allocating sufficient space for the read
-    // maybe check if format 0 dont do loop, although it's not that severe
-    // maybe test malloc?
+    // maybe check if format 0 dont do loop?
         
     tracks = midi->header.number_of_tracks;
     midi->tracks = malloc(sizeof(struct track)*tracks);
     for(int i = 0; i < tracks; i++){
 
-        printf("\n\ntrack # %d\n\n", i);
+        //printf("\n\ntrack # %d\n\n", i);
         
         fread(&midi->tracks[i].chunk_ID, 1, 4, input);
         whole_size += 4;
         fread(&midi->tracks[i].chunk_size, 1, 4, input);
         whole_size += 4;
+
         midi->tracks[i].chunk_size = le2be32(midi->tracks[i].chunk_size);
-        printf("%x\n", midi->tracks[i].chunk_size);
 
-        /*
-        printf("chunk_ID:\t%.4s\n"
-               "chunk_size:\t%d\n"
-               , midi->tracks[i].chunk_ID,
-               midi->tracks[i].chunk_size);
-        */
-
-        // uses the chunk size to allocate sufficient memory
         int j, bytes;
         midi->tracks[i].track_events = malloc(sizeof(struct track_events)*(midi->tracks[i].chunk_size));
         bytes = 0;
         j = 0;
+
         // since many data have variable size, a while loop should suffice
         while(bytes < midi->tracks[i].chunk_size){
-        //for(int j = 0; j < (int)(midi->tracks[i].chunk_size/8); j++ ){
-            printf("size of %d\n", bytes);
+
             // variable lenght delta time, every event has this
             uint32_t value;
             uint8_t c;
-            // is the if needed?
+
             bytes++;
             if ( (value = getc(input)) & 0x80 ){
                 value &= 0x7F;
@@ -175,7 +167,7 @@ int main(void){
                 } while (c & 0x80);
             }
             midi->tracks[i].track_events[j].delta_time = value;
-            
+                        
             // now to checking which kind of event it is
             fread(&midi->tracks[i].track_events[j].event, 1, 1, input);
             bytes++;
@@ -195,10 +187,12 @@ int main(void){
                     fread(&midi->tracks[i].track_events[j].meta.data, 1, lenght, input);
                     bytes += lenght;
                 }
+                /*
                 printf("event_type:\t%x\n"
                     "event_lenght:\t%x\n"
                    , 
                    midi->tracks[i].track_events[j].meta.type, lenght);
+                */
                 switch (midi->tracks[i].track_events[j].meta.type)
                 {
                 case 0x00:
@@ -277,7 +271,7 @@ int main(void){
                     bytes++;
                 }
 
-                
+                /*
                 printf("event:\t%x\n"
                     "type:\t%x\n"
                     "channel:\t%x\n"
@@ -287,27 +281,27 @@ int main(void){
                     type,
                     channel,
                     midi->tracks[i].track_events[j].midi.parameter1);
-                // for now not needed, only when transcribing to a buzzer readable format
+                */
                 switch (type)
                 {
                 case 0x08: // note off
                     fread(&midi->tracks[i].track_events[j].midi.parameter2, 1, 1, input);
-                    printf("parameter2:\t%x\n",midi->tracks[i].track_events[j].midi.parameter2);
+                    //printf("parameter2:\t%x\n",midi->tracks[i].track_events[j].midi.parameter2);
                     bytes++;
                     break;
                 case 0x09: // note on
                     fread(&midi->tracks[i].track_events[j].midi.parameter2, 1, 1, input);
-                    printf("parameter2:\t%x\n",midi->tracks[i].track_events[j].midi.parameter2);
+                    //printf("parameter2:\t%x\n",midi->tracks[i].track_events[j].midi.parameter2);
                     bytes++;
                     break;
                 case 0x0a: // note aftertouch
                     fread(&midi->tracks[i].track_events[j].midi.parameter2, 1, 1, input);
-                    printf("parameter2:\t%x\n",midi->tracks[i].track_events[j].midi.parameter2);
+                    //printf("parameter2:\t%x\n",midi->tracks[i].track_events[j].midi.parameter2);
                     bytes++;
                     break;
                 case 0x0b: // controller
                     fread(&midi->tracks[i].track_events[j].midi.parameter2, 1, 1, input);
-                    printf("parameter2:\t%x\n",midi->tracks[i].track_events[j].midi.parameter2);
+                    //printf("parameter2:\t%x\n",midi->tracks[i].track_events[j].midi.parameter2);
                     bytes++;
                     break;
                 case 0x0c: // program change
@@ -318,7 +312,7 @@ int main(void){
                     break;
                 case 0x0e: // pitch bend
                     fread(&midi->tracks[i].track_events[j].midi.parameter2, 1, 1, input);
-                    printf("parameter2:\t%x\n",midi->tracks[i].track_events[j].midi.parameter2);
+                    //printf("parameter2:\t%x\n",midi->tracks[i].track_events[j].midi.parameter2);
                     bytes++;
                     break;
                 default:
@@ -328,17 +322,6 @@ int main(void){
                 }
             }
             j++;
-            /*
-            printf("event_type:\t%x\n"
-                   "event_type:\t%x\n"
-                   "parameter1:\t%d\n"
-                   "parameter2:\t%d\n"
-                   , 
-                   midi->tracks[i].track_events[0].type >> 4,
-                   midi->tracks[i].track_events[0].type & 0x0F,
-                   midi->tracks[i].track_events[0].parameter1,
-                   midi->tracks[i].track_events[0].parameter2);
-            */
         }
         whole_size += bytes;
     }
@@ -346,8 +329,8 @@ int main(void){
     /* rewriting the contents that just got read to a file 
     so I can check whether or not it got read correctly */
 
-    
     fclose(input);
+    /*
     FILE *output;
     output = fopen("./teste.mid","w");
     midi->header.chunk_size = le2be32(midi->header.chunk_size);
@@ -451,7 +434,86 @@ int main(void){
         }
         
     }
+    */
+
+    FILE *output;
+    char file[20];
     
+    for(int i = 0; i < tracks; i++){
+
+        char number[3];
+        sprintf(number,"%d",i);
+        strcpy(file, "./tracks/track_");
+        if(i < 10){
+            strncat(file, number, 1);
+        } else {
+            strncat(file, number, 2);
+        }
+
+        output = fopen(file,"w+");
+        // maybe not necessary?
+        fprintf(output, "delta_time\tnote\n");
+
+        int bytes = 0;
+        int j = 0;
+
+        while(bytes < midi->tracks[i].chunk_size){
+            
+            uint32_t buffer;
+            buffer = midi->tracks[i].track_events[j].delta_time & 0x7F;
+            bytes++;
+            fprintf(output, "%d\t", midi->tracks[i].track_events[j].delta_time);
+            while ( (midi->tracks[i].track_events[j].delta_time >>= 7) )
+            {
+                bytes++;
+                buffer <<= 8;
+                buffer |= ((midi->tracks[i].track_events[j].delta_time & 0x7F) | 0x80);
+            }
+
+            
+            
+            if(midi->tracks[i].track_events[j].event != 0){
+                bytes++;
+            }
+            if(midi->tracks[i].track_events[j].event == 0xff){
+                bytes++;
+                bytes++;
+                bytes += midi->tracks[i].track_events[j].meta.lenght;
+                fprintf(output, "0\n");
+            } else if(midi->tracks[i].track_events[j].event == 0xf0) {
+                fprintf(output, "0\n");
+                //??
+            } else {
+                uint8_t type;
+                if(midi->tracks[i].track_events[j].event == 0){
+                    type = midi->last_event & 0xf0;
+                    type >>= 4;
+                } else {
+                    midi->last_event = midi->tracks[i].track_events[j].event;
+                    type = midi->tracks[i].track_events[j].event & 0xf0;
+                    type >>= 4;
+
+                }
+                bytes++;
+                switch (type)
+                {
+                case 0x08: // note off
+                    fprintf(output, "%d\n", midi->tracks[i].track_events[j].midi.parameter1);
+                    bytes++;
+                    break;
+                case 0x09: // note on
+                    fprintf(output, "%d\n", midi->tracks[i].track_events[j].midi.parameter1);
+                    bytes++;
+                    break;
+                default:
+                    fprintf(output, "0\n");
+                }
+            }
+            j++;
+        }
+        fclose(output);
+    }
+
     return 0;
 }
 /* 

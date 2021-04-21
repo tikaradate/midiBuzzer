@@ -1,3 +1,5 @@
+#ifndef __MIDI__
+#define __MIDI__
 #include <inttypes.h>
 
 #define HEADER_SIZE 14
@@ -57,9 +59,8 @@ struct midi {
     uint8_t last_event;
 };
 
-void read_midi(struct midi *midi, FILE *input);
+// functions that convert the endianess of 2 or 4 bytes
+uint16_t le2be16 (uint16_t number);
+uint32_t le2be32 (uint32_t number);
 
-void read_header(struct midi *midi, FILE *input);
-
-void read_tracks(struct midi *midi, FILE *input);
-
+#endif

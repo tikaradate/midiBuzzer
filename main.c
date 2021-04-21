@@ -23,11 +23,16 @@ void print_main_header(struct midi *midi){
     
 }
 
-int main(void){
+int main(int argc, char **argv){
+    if(argc < 2){
+        fprintf(stderr, "No file adress given.\n");
+        exit(1);
+    }
+
     FILE *input;
     struct midi *midi;
 
-    input = fopen("midis/joel.mid", "r");
+    input = fopen(argv[1], "r");
     if (!input) {
         perror("Error at file opening");
         exit(1);
